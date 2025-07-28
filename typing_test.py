@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 from openpyxl import load_workbook
 import random
 import time
@@ -10,6 +11,7 @@ import japanize_matplotlib
 from matplotlib.ticker import MaxNLocator
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from datetime import datetime
+import statistics
 
 SCORE_FILE = "scores.json"
 
@@ -166,30 +168,69 @@ class TypingTestApp:
         if not scores:
             label = tk.Label(self.root, text="スコアデータがありません。", font=("Arial", 14))
             label.pack(pady=20)
-        else:
-            fig, ax = plt.subplots(figsize=(6, 4))
-            values = [s["correct_chars"] for s in scores]
+            back_btn = tk.Button(self.root, text="戻る", command=self.show_title)
+            back_btn.pack(pady=10)
+            return
+
+        self.scores = scores
+        self.graph_type = tk.StringVar(value="折れ線グラフ")
+
+        # 統計情報を表示
+        values = [s["correct_chars"] for s in scores]
+        max_val = max(values)
+        min_val = min(values)
+        avg_val = round(statistics.mean(values), 2)
+
+        stats_frame = tk.Frame(self.root)
+        stats_frame.pack(pady=10)
+        tk.Label(stats_frame, text=f"最高点: {max_val}").grid(row=0, column=0, padx=5)
+        tk.Label(stats_frame, text=f"最低点: {min_val}").grid(row=0, column=1, padx=5)
+        tk.Label(stats_frame, text=f"平均点: {avg_val}").grid(row=0, column=2, padx=5)
+
+        # グラフタイプ選択
+        option_frame = tk.Frame(self.root)
+        option_frame.pack(pady=5)
+        ttk.Combobox(option_frame, textvariable=self.graph_type,
+                     values=["折れ線グラフ", "箱ひげ図"], state="readonly").pack(side=tk.LEFT, padx=5)
+        tk.Button(option_frame, text="表示更新", command=self.update_graph).pack(side=tk.LEFT, padx=5)
+
+        # グラフ描画領域
+        self.graph_area = tk.Frame(self.root)
+        self.graph_area.pack(pady=10)
+        self.update_graph()
+
+        # 戻る・リセットボタン
+        btn_frame = tk.Frame(self.root)
+        btn_frame.pack(pady=20)
+        back_btn = tk.Button(btn_frame, text="戻る", command=self.show_title)
+        reset_btn = tk.Button(btn_frame, text="スコアをすべて削除", command=self.confirm_clear_scores)
+        back_btn.pack(side=tk.LEFT, padx=10)
+        reset_btn.pack(side=tk.LEFT, padx=10)
+
+    def update_graph(self):
+        for w in self.graph_area.winfo_children():
+            w.destroy()
+
+        values = [s["correct_chars"] for s in self.scores]
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        if self.graph_type.get() == "折れ線グラフ":
             x = range(1, len(values) + 1)
             ax.plot(x, values, marker='o')
             ax.set_title("スコア推移")
             ax.set_xlabel("回数")
             ax.set_ylabel("正解文字数")
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-
             for i, n in enumerate(values):
                 ax.text(x[i], values[i], n)
+        else:
+            ax.boxplot(values)
+            ax.set_title("スコア分布（箱ひげ図）")
+            ax.set_ylabel("正解文字数")
 
-            canvas = FigureCanvasTkAgg(fig, master=self.root)
-            canvas.draw()
-            canvas.get_tk_widget().pack()
-
-        btn_frame = tk.Frame(self.root)
-        btn_frame.pack(pady=20)
-
-        back_btn = tk.Button(btn_frame, text="戻る", command=self.show_title)
-        reset_btn = tk.Button(btn_frame, text="スコアをすべて削除", command=self.confirm_clear_scores)
-        back_btn.pack(side=tk.LEFT, padx=10)
-        reset_btn.pack(side=tk.LEFT, padx=10)
+        canvas = FigureCanvasTkAgg(fig, master=self.graph_area)
+        canvas.draw()
+        canvas.get_tk_widget().pack()
 
     def confirm_clear_scores(self):
         if messagebox.askyesno("確認", "本当にスコアを削除しますか？"):
